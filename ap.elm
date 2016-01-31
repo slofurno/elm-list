@@ -6,7 +6,8 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Lazy exposing (lazy, lazy2, lazy3)
 import Json.Decode as Json exposing ((:=))
-import Http
+import Json.Encode as Encode exposing (..)
+import Http exposing (..) 
 import Task exposing (..)
 import Signal exposing (Signal, Address)
 import StartApp
@@ -48,15 +49,14 @@ update action model =
   case action of
     NoOp -> (model, Effects.none)
     AddWord -> 
-      ({ model | words = model.words ++ [model.query] }, Effects.none)
+      ({ model | query = "" }, putWord model.query)
+--      ({ model | words = model.words ++ [model.query] }, putWord model.word)
     UpdateField word ->
       ({ model | query = word }, Effects.none)
     FetchWordsResponse maybeWords ->
       ({ model | words = (Maybe.withDefault model.words maybeWords) }, Effects.none)
     FetchWords ->
       (model, fetchWords)
-
-
 
 --main : Signal Html
 --main =
@@ -98,6 +98,26 @@ wordList address words =
 wordItem : String -> Html
 wordItem word =
   li [] [text word]
+
+{-
+stringifyWord : String -> Body
+stringifyWord word =
+  let j = 
+    Encode.encode 0 word
+  in
+    Http.string j 
+ -}
+
+putWord : String -> Effects Action
+putWord word =
+  let body = 
+    Http.string (Encode.encode 0 (Encode.string word))
+
+  in
+    Http.post decodeWords "http://192.168.1.104:3003/api" body
+      |> Task.toMaybe
+      |> Task.map FetchWordsResponse
+      |> Effects.task
 
 fetchWords : Effects Action
 fetchWords =
