@@ -11,19 +11,23 @@ import Http exposing (..)
 import Task exposing (..)
 import Signal exposing (Signal, Address)
 import StartApp
+import List exposing (..)
 
 app =
   StartApp.start {init = init, update = update, view = view, inputs = []}
 
-  
-
 type alias Model = {
-    words: List String,
+    words: List Word,
     query: String
 }
 
+type alias Word = {
+  id: Int,
+  word: String
+}
+
 type alias WordList =
-  List String
+  List Word 
 
 initialModel : Model
 initialModel = { words = [], query = " " }
@@ -35,8 +39,10 @@ init =
 type Action = NoOp
   | AddWord 
   | UpdateField String
-  | FetchWordsResponse (Maybe (List String))
+  | FetchWordsResponse (Maybe (List Word))
   | FetchWords
+  | RemoveWord Word 
+--  | Swallow (Result RawError Response)
 
 {-
 model : Signal Model
@@ -57,6 +63,17 @@ update action model =
       ({ model | words = (Maybe.withDefault model.words maybeWords) }, Effects.none)
     FetchWords ->
       (model, fetchWords)
+    RemoveWord word ->
+      let rest =
+        filter (\n -> n.id /= word.id) model.words
+      in
+        ({ model | words = rest }, deleteWord word)
+
+{-    Swallow res ->
+      if res.status == 200 then
+        (model, todo)
+-}
+
 
 --main : Signal Html
 --main =
@@ -88,25 +105,17 @@ wordEntry address word =
     input [ type' "button", onClick address AddWord ] []
   ]
 
-wordList : Address Action -> List String -> Html
+wordList : Address Action -> List Word -> Html
 wordList address words =
   div [] [
-    ul [] (List.map wordItem words)
+    ul [] (List.map (wordItem address) words)
   ]
 
 
-wordItem : String -> Html
-wordItem word =
-  li [] [text word]
+wordItem : Address Action -> Word -> Html
+wordItem address word =
+  li [] [text word.word, label [ onClick address (RemoveWord word)] [text "  x"]]
 
-{-
-stringifyWord : String -> Body
-stringifyWord word =
-  let j = 
-    Encode.encode 0 word
-  in
-    Http.string j 
- -}
 
 putWord : String -> Effects Action
 putWord word =
@@ -119,6 +128,22 @@ putWord word =
       |> Task.map FetchWordsResponse
       |> Effects.task
 
+deleteRequest : String -> Request
+deleteRequest url = 
+  { verb = "DELETE"
+  , headers = []
+  , url = url
+  , body = empty
+  }
+
+deleteWord : Word -> Effects Action 
+deleteWord word =
+  send defaultSettings (deleteRequest ("http://192.168.1.104:3003/api/" ++ (toString word.id)))
+  |> fromJson decodeWords
+  |> Task.toMaybe
+  |> Task.map FetchWordsResponse
+  |> Effects.task
+
 fetchWords : Effects Action
 fetchWords =
   Http.get decodeWords "http://192.168.1.104:3003/api"
@@ -126,6 +151,11 @@ fetchWords =
     |> Task.map FetchWordsResponse
     |> Effects.task
 
-decodeWords : Json.Decoder (List String)
-decodeWords =
-  Json.list Json.string
+decodeWords : Json.Decoder (List Word)
+decodeWords = Json.list decodeWord
+
+decodeWord : Json.Decoder Word
+decodeWord = 
+  Json.object2 Word
+    ("id" := Json.int)
+    ("word" := Json.string)
